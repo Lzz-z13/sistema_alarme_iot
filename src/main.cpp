@@ -15,6 +15,7 @@ const int ECHO_PIN = 14;
 
 // Distância máxima de range
 const int MAX_DISTANCE = 50;
+const int LIMIT_DISTANCIA = 15;
 
 NewPing sonar(
     TRIG_PIN, ECHO_PIN, MAX_DISTANCE);
@@ -91,10 +92,26 @@ void loop()
   // io.run();
   // verificarbotao();
 
-  testeGeral();
+  unsigned int distancia = sonar.ping_cm();
+
+  bool intrusao = distancia > 0 && distancia < LIMIT_DISTANCIA;
+
+  if (intrusao)
+  {
+    digitalWrite(LED_ALARME, 1);
+    digitalWrite(BUZZER_PIN, 1);
+    Serial.println("ALERTA: OBJETO DETECTADO!");
+  }
+  else
+  {
+    digitalWrite(LED_ALARME, 0);
+    digitalWrite(BUZZER_PIN, 0);
+  }
+  delay(500);
 }
 
-void testeGeral(){
+void testeGeral()
+{
   // Teste do ultrassônico
   unsigned int distancia = sonar.ping_cm();
   Serial.print("Distância: ");
