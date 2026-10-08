@@ -92,22 +92,24 @@ void loop()
   // io.run();
   // verificarbotao();
 
-  unsigned int distancia = sonar.ping_cm();
+  // unsigned int distancia = sonar.ping_cm();
 
-  bool intrusao = distancia > 0 && distancia < LIMIT_DISTANCIA;
+  // bool intrusao = distancia > 0 && distancia < LIMIT_DISTANCIA;
 
-  if (intrusao)
-  {
-    digitalWrite(LED_ALARME, 1);
-    digitalWrite(BUZZER_PIN, 1);
-    Serial.println("ALERTA: OBJETO DETECTADO!");
-  }
-  else
-  {
-    digitalWrite(LED_ALARME, 0);
-    digitalWrite(BUZZER_PIN, 0);
-  }
-  delay(500);
+  // if (intrusao)
+  // {
+  //   digitalWrite(LED_ALARME, 1);
+  //   digitalWrite(BUZZER_PIN, 1);
+  //   Serial.println("ALERTA: OBJETO DETECTADO!");
+  // }
+  // else
+  // {
+  //   digitalWrite(LED_ALARME, 0);
+  //   digitalWrite(BUZZER_PIN, 0);
+  // }
+  // delay(500);
+
+  testeGeral();
 }
 
 void testeGeral()
