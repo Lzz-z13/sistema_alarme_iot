@@ -7,15 +7,13 @@ const int LED_ALARME = 13;
 const int BUZZER_PIN = 27;
 const int BOTAO_FISICO = 26;
 
-// ----------------------------
-
-// Pinos sensor ultrassônico
+// Pinos do sensor ultra sonico
 const int TRIG_PIN = 12;
 const int ECHO_PIN = 14;
 
-// Distância máxima de range
+// Distancia máxima
 const int MAX_DISTANCE = 50;
-const int LIMIT_DISTANCIA = 15;
+const int LIMITE_DISTANCIA = 15;
 
 NewPing sonar(
     TRIG_PIN, ECHO_PIN, MAX_DISTANCE);
@@ -26,31 +24,33 @@ AdafruitIO_WiFi io(
     WIFI_SSID,
     WIFI_PASS);
 
-AdafruitIO_Feed *feedbotaoled = io.feed("botaoled");
+AdafruitIO_Feed *feedbotao = io.feed("botao");
 
-bool estadoled = false;
+// -----------------------------------
+// Estado do sistema
+bool alarmeAtivo = false;
+unsigned long ultimaLeituraSensor = 0;
+const unsigned long INTERVALO_SENSOR = 500; // 0.5 segundo
+// -----------------------------------
 
-// última leitura realizada pelo botao
+// Controle do botão
 byte ultimaLeituraBotao = HIGH;
-
-// estado consideravel estável após o debounce
 byte estadobotaoestavel = HIGH;
-
-// momento da última alteração detectada
 unsigned long ultimamudancabotao = 0;
+const unsigned long TEMPO_DEBOUNCE = 150;
+// -----------------------------------
 
-// tempo ultilizado para eliminar rúido mecanicos do botao
-const unsigned long TEMPO_DEBOUNCE = 50;
-
-void handlebotaoled(AdafruitIO_Data *data);
-
-void atualizarled();
-
-void publicarestadoled();
-
-void verificarbotao();
+void verificarBotao();
 
 void testeGeral();
+
+void handleAlarme(AdafruitIO_Data *data);
+
+void verificaSensor();
+
+void ativarAlerta();
+
+void desligarAlerta();
 
 void setup()
 {
@@ -62,26 +62,29 @@ void setup()
   pinMode(BOTAO_FISICO, INPUT_PULLUP);
 
   pinMode(BUZZER_PIN, OUTPUT);
-  // Serial.println("");
-  // Serial.println("Iniciando a ESP...");
 
-  // feedbotaoled->onMessage(handlebotaoled);
+  desligarAlerta();
 
-  // io.connect();
+  feedbotao->onMessage(handleAlarme);
 
-  // while (io.status() < AIO_CONNECTED)
-  // {
-  //   Serial.print(".");
-  //   delay(500);
-  // }
+  Serial.println("");
+  Serial.println("Iniciando a ESP...");
 
-  // Serial.println();
+  io.connect();
 
-  // Serial.println(io.statusText());
+  while (io.status() < AIO_CONNECTED)
+  {
+    Serial.print(".");
+    delay(500);
+  }
 
-  // Serial.println("Adafruit IO Conectado!");
+  Serial.println();
 
-  // feedbotaoled->get();
+  Serial.println(io.statusText());
+
+  Serial.println("Adafruit IO Conectado");
+
+  feedbotao->get();
 
   Serial.println("Sistema de alarme iniciado...");
   delay(2000);
@@ -89,124 +92,116 @@ void setup()
 
 void loop()
 {
-  // io.run();
-  // verificarbotao();
+  io.run();
 
-  // unsigned int distancia = sonar.ping_cm();
+  verificarBotao();
+  verificaSensor();
 
-  // bool intrusao = distancia > 0 && distancia < LIMIT_DISTANCIA;
-
-  // if (intrusao)
-  // {
-  //   digitalWrite(LED_ALARME, 1);
-  //   digitalWrite(BUZZER_PIN, 1);
-  //   Serial.println("ALERTA: OBJETO DETECTADO!");
-  // }
-  // else
-  // {
-  //   digitalWrite(LED_ALARME, 0);
-  //   digitalWrite(BUZZER_PIN, 0);
-  // }
-  // delay(500);
-
-  testeGeral();
+  // --- Código de teste geral
+  // testeGeral();
 }
 
-void testeGeral()
+void handleAlarme(AdafruitIO_Data *data)
 {
-  // Teste do ultrassônico
+  String valor = data->toString();
+
+  valor.trim();
+  valor.toLowerCase();
+
+  if (valor == "true")
+  {
+    alarmeAtivo = true;
+    Serial.println("Alarme ARMADO remotamente");
+  }
+  else if (valor == "false")
+  {
+    alarmeAtivo = false;
+    Serial.println("Alarme DESARMADO remotamente");
+  }
+  else
+  {
+    Serial.println("Valor inválida do FEED...");
+  }
+}
+
+void verificarBotao()
+{
+  int leituraAtual = digitalRead(BOTAO_FISICO);
+
+  if (leituraAtual != ultimaLeituraBotao)
+  {
+    ultimamudancabotao = millis();
+    ultimaLeituraBotao = leituraAtual;
+  }
+
+  if (millis() - ultimamudancabotao > TEMPO_DEBOUNCE)
+  {
+    estadobotaoestavel = leituraAtual;
+    if (estadobotaoestavel == LOW)
+    {
+      alarmeAtivo = !alarmeAtivo;
+      feedbotao->save(String(alarmeAtivo ? "true" : "false"));
+      Serial.println(alarmeAtivo ? "Alarme ATIVADO pelo botão físico" : "Alarme DESATIVADO pelo botão físico");
+    }
+    if (!alarmeAtivo)
+    {
+      desligarAlerta();
+    }
+  }
+}
+
+void verificaSensor()
+{
+  if (millis() - ultimaLeituraSensor < INTERVALO_SENSOR)
+  {
+    return;
+  }
+
+  ultimaLeituraSensor = millis();
+
   unsigned int distancia = sonar.ping_cm();
   Serial.print("Distância: ");
   Serial.print(distancia);
   Serial.println(" cm");
 
-  // Teste do botão
+  bool intrusao = alarmeAtivo && (distancia > 0 && distancia < LIMITE_DISTANCIA);
+
+  if(intrusao){
+    ativarAlerta();
+  }
+  else{
+    desligarAlerta();
+  }
+}
+
+void ativarAlerta(){
+  digitalWrite(LED_ALARME, HIGH);
+  digitalWrite(BUZZER_PIN, HIGH);
+}
+
+void desligarAlerta()
+{
+  digitalWrite(LED_ALARME, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+void testeGeral()
+{
+  // teste do ultrassônico
+  unsigned int distancia = sonar.ping_cm();
+  Serial.print("Distância: ");
+  Serial.print(distancia);
+  Serial.println(" cm");
+
+  // teste do botão
   Serial.print("Estado do botão: ");
   Serial.println(digitalRead(BOTAO_FISICO));
 
-  // Teste do LED / Buzzer
+  // teste led / buzzer
   digitalWrite(LED_ALARME, HIGH);
   digitalWrite(BUZZER_PIN, HIGH);
   delay(500);
   digitalWrite(LED_ALARME, LOW);
   digitalWrite(BUZZER_PIN, LOW);
   delay(500);
-}
-
-void handlebotaoled(AdafruitIO_Data *data)
-{
-  String valorrecebido = data->toString();
-
-  // remove possiveis espaços eantes ou depois do texto
-  valorrecebido.trim();
-
-  // converte para minúsculo
-  valorrecebido.toLowerCase();
-
-  Serial.print("Valor recebido do Adafruit IO: ");
-  Serial.println(valorrecebido);
-
-  if (valorrecebido == "true")
-  {
-    estadoled = true;
-    atualizarled();
-    Serial.println("Comando remoto: LED LIGADO");
-  }
-  else if (valorrecebido == "false")
-  {
-    estadoled = false;
-    atualizarled();
-    Serial.println("Comando remoto: LED DESLIGADO");
-  }
-  else
-  {
-    Serial.println("Valor recebido não reconhecido!");
-  }
-}
-
-void atualizarled()
-{
-  // digitalWrite(LED_PIN, estadoled ? HIGH : LOW);
-}
-
-void publicarestadoled()
-{
-  if (estadoled)
-  {
-    feedbotaoled->save(String("true"));
-    Serial.println("Enviado ao Adafruit IO: true");
-  }
-  else
-  {
-    feedbotaoled->save(String("false"));
-    Serial.println("Enviado ao Adafruit IO: false");
-  }
-}
-
-void verificarbotao()
-{
-  // byte leituraatual = digitalRead(BOTAO_PIN);
-  // if(leituraatual != ultimaLeituraBotao){
-  //   ultimamudancabotao = millis();
-  //   ultimaLeituraBotao = leituraatual;
-  // }
-
-  // if(millis() - ultimamudancabotao > TEMPO_DEBOUNCE){
-  //   if(leituraatual != estadobotaoestavel){
-  //     estadobotaoestavel = leituraatual;
-  //     if(estadobotaoestavel == LOW){
-  //       Serial.println();
-  //       Serial.println("Botão físico pressionado!");
-  //       estadoled = !estadoled;
-
-  //       if(estadoled){
-  //         Serial.println("LED Ligado!");
-  //       }
-  //       else{
-  //         Serial.println("LED Desligado!");
-  //       }
-  //       publicarestadoled();
-  //     }
-  //   }
-  // }
 }
