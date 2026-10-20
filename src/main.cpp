@@ -12,8 +12,11 @@ const int TRIG_PIN = 12;
 const int ECHO_PIN = 14;
 
 // Distancia máxima
-const int MAX_DISTANCE = 50;
+const int MAX_DISTANCE = 100;
 const int LIMITE_DISTANCIA = 15;
+
+// Controle da última distância publicada
+int distanciaAnteriror = -1; 
 
 NewPing sonar(
     TRIG_PIN, ECHO_PIN, MAX_DISTANCE);
@@ -25,19 +28,20 @@ AdafruitIO_WiFi io(
     WIFI_PASS);
 
 AdafruitIO_Feed *feedbotao = io.feed("botao");
+AdafruitIO_Feed *feeddistancia = io.feed("distanciaultrassom");
 
 // -----------------------------------
 // Estado do sistema
 bool alarmeAtivo = false;
 unsigned long ultimaLeituraSensor = 0;
-const unsigned long INTERVALO_SENSOR = 500; // 0.5 segundo
+const unsigned long INTERVALO_SENSOR = 2500; // 2 segundo
 // -----------------------------------
 
 // Controle do botão
 byte ultimaLeituraBotao = HIGH;
 byte estadobotaoestavel = HIGH;
 unsigned long ultimamudancabotao = 0;
-const unsigned long TEMPO_DEBOUNCE = 150;
+const unsigned long TEMPO_DEBOUNCE = 250;
 // -----------------------------------
 
 void verificarBotao();
@@ -163,6 +167,13 @@ void verificaSensor()
   Serial.print("Distância: ");
   Serial.print(distancia);
   Serial.println(" cm");
+
+  if(distancia > 0 && distancia != distanciaAnteriror){
+    feeddistancia -> save(distancia);
+    distanciaAnteriror = distancia;
+
+    Serial.println("Distância enviada ao Adafruit IO.");
+  }
 
   bool intrusao = alarmeAtivo && (distancia > 0 && distancia < LIMITE_DISTANCIA);
 
