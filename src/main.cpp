@@ -13,10 +13,10 @@ const int ECHO_PIN = 14;
 
 // Distancia máxima
 const int MAX_DISTANCE = 100;
-const int LIMITE_DISTANCIA = 15;
+int LIMITE_DISTANCIA = 15;
 
 // Controle da última distância publicada
-int distanciaAnteriror = -1; 
+int distanciaAnteriror = -1;
 
 NewPing sonar(
     TRIG_PIN, ECHO_PIN, MAX_DISTANCE);
@@ -29,6 +29,12 @@ AdafruitIO_WiFi io(
 
 AdafruitIO_Feed *feedbotao = io.feed("botao");
 AdafruitIO_Feed *feeddistancia = io.feed("distanciaultrassom");
+
+AdafruitIO_Feed *feedLimite =
+    io.feed("limitealarme");
+
+AdafruitIO_Feed *feedIntrusao =
+    io.feed("intrusao");
 
 // -----------------------------------
 // Estado do sistema
@@ -44,6 +50,8 @@ unsigned long ultimamudancabotao = 0;
 const unsigned long TEMPO_DEBOUNCE = 250;
 // -----------------------------------
 
+bool intrusaoAnterior = false;
+
 void verificarBotao();
 
 void testeGeral();
@@ -55,6 +63,8 @@ void verificaSensor();
 void ativarAlerta();
 
 void desligarAlerta();
+
+void handleLimite(AdafruitIO_Data *data);
 
 void setup()
 {
@@ -70,6 +80,7 @@ void setup()
   desligarAlerta();
 
   feedbotao->onMessage(handleAlarme);
+  feedLimite->onMessage(handleLimite);
 
   Serial.println("");
   Serial.println("Iniciando a ESP...");
@@ -89,6 +100,8 @@ void setup()
   Serial.println("Adafruit IO Conectado");
 
   feedbotao->get();
+
+  feedLimite->get();
 
   Serial.println("Sistema de alarme iniciado...");
   delay(2000);
@@ -128,6 +141,31 @@ void handleAlarme(AdafruitIO_Data *data)
   }
 }
 
+void handleLimite(
+    AdafruitIO_Data *data)
+{
+  int novoLimite =
+      data->toInt();
+
+  // Aceita somente valores
+  // dentro de uma faixa válida
+  if (
+      novoLimite >= 5 &&
+      novoLimite <= 100)
+  {
+    LIMITE_DISTANCIA = novoLimite;
+
+    Serial.print(
+        "Novo limite: ");
+
+    Serial.print(
+        LIMITE_DISTANCIA);
+
+    Serial.println(
+        " cm");
+  }
+}
+
 void verificarBotao()
 {
   int leituraAtual = digitalRead(BOTAO_FISICO);
@@ -164,28 +202,50 @@ void verificaSensor()
   ultimaLeituraSensor = millis();
 
   unsigned int distancia = sonar.ping_cm();
+
   Serial.print("Distância: ");
   Serial.print(distancia);
   Serial.println(" cm");
 
-  if(distancia > 0 && distancia != distanciaAnteriror){
-    feeddistancia -> save(distancia);
+  // Publica a distância somente quando mudar
+  if (distancia > 0 && distancia != distanciaAnteriror)
+  {
+    feeddistancia->save(distancia);
     distanciaAnteriror = distancia;
 
     Serial.println("Distância enviada ao Adafruit IO.");
   }
 
-  bool intrusao = alarmeAtivo && (distancia > 0 && distancia < LIMITE_DISTANCIA);
+  // Verifica se existe intrusão
+  bool intrusao = alarmeAtivo &&
+                  (distancia > 0 && distancia < LIMITE_DISTANCIA);
 
-  if(intrusao){
+  if (intrusao != intrusaoAnterior)
+  {
+    feedIntrusao->save(
+        intrusao ? "true" : "false");
+
+    intrusaoAnterior = intrusao;
+
+    Serial.println(
+        intrusao
+            ? "INTRUSÃO DETECTADA!"
+            : "Intrusão encerrada.");
+  }
+
+  // Controla LED e buzzer
+  if (intrusao)
+  {
     ativarAlerta();
   }
-  else{
+  else
+  {
     desligarAlerta();
   }
 }
 
-void ativarAlerta(){
+void ativarAlerta()
+{
   digitalWrite(LED_ALARME, HIGH);
   digitalWrite(BUZZER_PIN, HIGH);
 }
